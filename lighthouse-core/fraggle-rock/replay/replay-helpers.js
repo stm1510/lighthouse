@@ -6,7 +6,7 @@
 'use strict';
 
 /**
- * @param {ReturnType<import('@puppeteer/replay')['parse']>['steps'][0]} step
+ * @param {import('@puppeteer/replay').Schema.Step} step
  * @return {boolean}
  */
 function isNavigationStep(step) {
