@@ -91,7 +91,7 @@ Now run Lighthouse, using the same page as before:
 // The local server is running on port 10632.
 const url = 'http://localhost:10632/dashboard';
 // Direct Lighthouse to use the same page.
-  // Disable storage reset so login session is preserved.
+// Disable storage reset so login session is preserved.
 const result = await lighthouse(url, {disableStorageReset: true}, undefined, page);
 const lhr = result.lhr;
 
