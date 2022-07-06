@@ -387,7 +387,6 @@ network-rtt: informative
 network-server-latency: informative
 no-document-write: pass
 no-unload-listeners: pass
-no-vulnerable-libraries: pass
 non-composited-animations: notApplicable
 notification-on-start: pass
 object-alt: notApplicable
@@ -554,7 +553,6 @@ meta-viewport
 modern-image-formats
 no-document-write
 no-unload-listeners
-no-vulnerable-libraries
 non-composited-animations
 notification-on-start
 object-alt
