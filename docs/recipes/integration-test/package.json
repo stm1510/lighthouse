@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "private": true,
   "scripts": {
     "test": "mocha --timeout 30000 example-lh-auth.test.js"

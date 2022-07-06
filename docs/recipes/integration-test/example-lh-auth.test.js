@@ -13,11 +13,11 @@
 
 /** @typedef {import('lighthouse/types/lhr')} LH */
 
-const puppeteer = require('puppeteer');
-const lighthouse = require('lighthouse');
-const {expect} = require('expect');
-const server = require('../auth/server/server.js');
-const {login, logout} = require('../auth/example-lh-auth.js');
+import puppeteer from 'puppeteer';
+import lighthouse from 'lighthouse';
+import expect from 'expect';
+import server from '../auth/server/server.js';
+import {login, logout} from '../auth/example-lh-auth.js';
 
 const CHROME_DEBUG_PORT = 8042;
 const SERVER_PORT = 10632;
@@ -96,8 +96,8 @@ describe('my site', () => {
   });
 
   afterEach(async () => {
+    await logout(page, ORIGIN);
     await page.close();
-    await logout(browser, ORIGIN);
   });
 
   describe('/ logged out', () => {
@@ -118,14 +118,14 @@ describe('my site', () => {
 
   describe('/ logged in', () => {
     it('lighthouse', async () => {
-      await login(browser, ORIGIN);
+      await login(page, ORIGIN);
       await page.goto(ORIGIN);
       const lhr = await runLighthouse(page.url());
       expect(lhr).toHaveLighthouseScoreGreaterThanOrEqual('seo', 0.9);
     });
 
     it('login form should not exist', async () => {
-      await login(browser, ORIGIN);
+      await login(page, ORIGIN);
       await page.goto(ORIGIN);
       const emailInput = await page.$('input[type="email"]');
       const passwordInput = await page.$('input[type="password"]');
@@ -143,14 +143,14 @@ describe('my site', () => {
 
   describe('/dashboard logged in', () => {
     it('lighthouse', async () => {
-      await login(browser, ORIGIN);
+      await login(page, ORIGIN);
       await page.goto(`${ORIGIN}/dashboard`);
       const lhr = await runLighthouse(page.url());
       expect(lhr).toHaveLighthouseScoreGreaterThanOrEqual('seo', 0.9);
     });
 
     it('has secrets', async () => {
-      await login(browser, ORIGIN);
+      await login(page, ORIGIN);
       await page.goto(`${ORIGIN}/dashboard`);
       expect(await page.content()).toContain('secrets');
     });
