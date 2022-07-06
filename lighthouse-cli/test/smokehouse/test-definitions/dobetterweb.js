@@ -256,14 +256,6 @@ const expectations = {
           },
         },
       },
-      'no-vulnerable-libraries': {
-        score: 0,
-        details: {
-          items: {
-            length: 1,
-          },
-        },
-      },
       'notification-on-start': {
         score: 0,
       },

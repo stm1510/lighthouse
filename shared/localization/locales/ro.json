@@ -866,27 +866,6 @@
   "lighthouse-core/audits/dobetterweb/no-document-write.js | title": {
     "message": "Evită `document.write()`"
   },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnSeverity": {
-    "message": "Cea mai mare severitate"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnVersion": {
-    "message": "Versiunea bibliotecii"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnVuln": {
-    "message": "Numărul de vulnerabilități"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | description": {
-    "message": "Unele scripturi terță parte pot conține vulnerabilități de securitate cunoscute, ușor de identificat și de exploatat de atacatori. [Află mai multe](https://web.dev/no-vulnerable-libraries/)."
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | displayValue": {
-    "message": "{itemCount,plural, =1{O vulnerabilitate detectată}few{# vulnerabilități detectate}other{# de vulnerabilități detectate}}"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | failureTitle": {
-    "message": "Include bibliotecile JavaScript front-end cu vulnerabilități de securitate cunoscute"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | title": {
-    "message": "Evită bibliotecile JavaScript front-end cu vulnerabilități de securitate cunoscute"
-  },
   "lighthouse-core/audits/dobetterweb/notification-on-start.js | description": {
     "message": "Utilizatorii nu au încredere sau sunt derutați de site-urile care solicită să trimită notificări fără context. Asociază solicitarea cu gesturile utilizatorilor. [Află mai multe](https://web.dev/notification-on-start/)."
   },

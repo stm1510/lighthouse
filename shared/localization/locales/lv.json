@@ -866,27 +866,6 @@
   "lighthouse-core/audits/dobetterweb/no-document-write.js | title": {
     "message": "Netiek izmantots elements “`document.write()`”"
   },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnSeverity": {
-    "message": "Vislielākā nozīme"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnVersion": {
-    "message": "Bibliotēkas versija"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnVuln": {
-    "message": "Ievainojamības gadījumu skaits"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | description": {
-    "message": "Dažos trešo pušu skriptos var būt zināma drošības ievainojamība, kuras uzbrucēji viegli identificē un izmanto. [Uzziniet vairāk](https://web.dev/no-vulnerable-libraries/)."
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | displayValue": {
-    "message": "{itemCount,plural, =1{Konstatēta 1 ievainojamība}zero{Konstatētas # ievainojamības}one{Konstatēta # ievainojamība}other{Konstatētas # ievainojamības}}"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | failureTitle": {
-    "message": "Ietver JavaScript priekšgalsistēmas bibliotēkas ar zināmu drošības ievainojamību"
-  },
-  "lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | title": {
-    "message": "Nepieļauj JavaScript priekšgalsistēmas bibliotēkas ar zināmām drošības ievainojamībām"
-  },
   "lighthouse-core/audits/dobetterweb/notification-on-start.js | description": {
     "message": "Lietotājus mulsina un viņiem rada neuzticību vietnes, kas pieprasa sūtīt paziņojumus bez konteksta. Tā vietā ieteicams saistīt pieprasījumu ar lietotāja žestiem. [Uzziniet vairāk](https://web.dev/notification-on-start/)."
   },
