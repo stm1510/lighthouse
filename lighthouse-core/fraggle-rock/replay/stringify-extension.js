@@ -44,7 +44,7 @@ class LighthouseStringifyExtension extends PuppeteerStringifyExtension {
     };
 
     // eslint-disable-next-line max-len
-    out.appendLine(`const lhFlow = await lhApi.startFlow(page, {name: '${flow.title || 'undefined'}', config, configContext: ${JSON.stringify(configContext)}});`);
+    out.appendLine(`const lhFlow = await lhApi.startFlow(page, {name: '${JSON.stringify(flow.title)}', config, configContext: ${JSON.stringify(configContext)}});`);
   }
 
   /**

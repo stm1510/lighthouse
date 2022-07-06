@@ -96,7 +96,6 @@
   },
   "devDependencies": {
     "@build-tracker/cli": "^1.0.0-beta.15",
-    "@puppeteer/replay": "^0.5.0",
     "@rollup/plugin-alias": "^3.1.2",
     "@rollup/plugin-commonjs": "^20.0.0",
     "@rollup/plugin-dynamic-import-vars": "^1.1.1",
@@ -181,6 +180,7 @@
     "webtreemap-cdt": "^3.2.1"
   },
   "dependencies": {
+    "@puppeteer/replay": "^0.5.0",
     "@sentry/node": "^6.17.4",
     "axe-core": "4.4.1",
     "chrome-launcher": "^0.15.1",
