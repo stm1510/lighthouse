@@ -12,7 +12,7 @@
 const Audit = require('./audit.js');
 const JsBundles = require('../computed/js-bundles.js');
 const i18n = require('../lib/i18n/i18n.js');
-const {getIssueDetailDescription} = require('./deprecations-strings.js');
+const {getIssueDetailDescription} = require('../lib/deprecations-strings.js');
 
 /* eslint-disable max-len */
 const UIStrings = {
