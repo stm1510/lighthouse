@@ -181,35 +181,28 @@ async function testPage(page, browser, url, config) {
   const inspectorTarget = targets.filter(t => t.url().includes('devtools'))[1];
   if (!inspectorTarget) throw new Error('No inspector found.');
 
-  const inspectorSession = await inspectorTarget.createCDPSession();
-  await inspectorSession.send('Runtime.enable');
+  const session = await inspectorTarget.createCDPSession();
+  await session.send('Runtime.enable');
 
   // Navigate to page and wait for initial HTML to be parsed before trying to start LH.
-  const pageSession = await page.target().createCDPSession();
-  await pageSession.send('Page.enable');
-  await pageSession.send('Page.setLifecycleEventsEnabled', {enabled: true});
-
-  /** @type {Promise<void>} */
-  const fcpPromise = new Promise(resolve => {
-    pageSession.on('Page.lifecycleEvent', event => {
-      if (event.name === 'firstContentfulPaint') resolve();
-    });
+  await new Promise((resolve, reject) => {
+    page.target().createCDPSession()
+      .then(session => {
+        session.send('Page.enable').then(() => {
+          session.once('Page.domContentEventFired', resolve);
+          page.goto(url);
+        });
+      })
+      .catch(reject);
   });
-
-  const initialLoadPromise = page.goto(url, {
-    waitUntil: ['domcontentloaded', 'load', 'networkidle0'],
-  });
-
-  await Promise.all([initialLoadPromise, fcpPromise]);
-  await pageSession.detach();
 
   if (config) {
     // Must attach to the Lighthouse worker target and override the `self.createConfig`
     // function, allowing us to use any config we want.
-    inspectorSession.send('Target.setAutoAttach', {
+    session.send('Target.setAutoAttach', {
       autoAttach: true, flatten: true, waitForDebuggerOnStart: false,
     });
-    inspectorSession.once('Target.attachedToTarget', async (event) => {
+    session.once('Target.attachedToTarget', async (event) => {
       if (event.targetInfo.type !== 'worker') throw new Error('expected lighthouse worker');
 
       const targets = await browser.targets();
@@ -236,19 +229,18 @@ async function testPage(page, browser, url, config) {
   let startLHResponse;
   while (!startLHResponse || startLHResponse.exceptionDetails) {
     if (startLHResponse) await new Promise(resolve => setTimeout(resolve, 1000));
-    startLHResponse = await inspectorSession.send('Runtime.evaluate', {
+    startLHResponse = await session.send('Runtime.evaluate', {
       expression: startLighthouse,
       awaitPromise: true,
     }).catch(err => ({exceptionDetails: err}));
   }
 
   /** @type {LH.Puppeteer.Protocol.Runtime.EvaluateResponse} */
-  const lhStartedResponse = await inspectorSession.send('Runtime.evaluate', {
+  const lhStartedResponse = await session.send('Runtime.evaluate', {
     expression: sniffLighthouseStarted,
     awaitPromise: true,
     returnByValue: true,
   }).catch(err => err);
-
   // Verify the first parameter to `startLighthouse`, which should be a url.
   // In M100 the LHR is returned on `collectLighthouseResults` which has just 1 options parameter containing `inspectedUrl`.
   // Don't try to check the exact value (because of redirects and such), just
@@ -262,7 +254,7 @@ async function testPage(page, browser, url, config) {
   }
 
   /** @type {LH.Puppeteer.Protocol.Runtime.EvaluateResponse} */
-  const remoteLhrResponse = await inspectorSession.send('Runtime.evaluate', {
+  const remoteLhrResponse = await session.send('Runtime.evaluate', {
     expression: sniffLhr,
     awaitPromise: true,
     returnByValue: true,
