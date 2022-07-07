@@ -311,7 +311,7 @@ const expectations = {
         details: {
           items: [
             {
-              value: /'window.webkitStorageInfo' is deprecated/,
+              value: /`window.webkitStorageInfo` is deprecated/,
               source: {
                 type: 'source-location',
                 url: 'http://localhost:10200/dobetterweb/dbw_tester.js',
@@ -322,7 +322,7 @@ const expectations = {
               subItems: undefined,
             },
             {
-              value: /Synchronous XMLHttpRequest on the main thread is deprecated/,
+              value: /Synchronous `XMLHttpRequest` on the main thread is deprecated/,
               source: {
                 type: 'source-location',
                 url: 'http://localhost:10200/dobetterweb/dbw_tester.html',
