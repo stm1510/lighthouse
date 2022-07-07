@@ -12,8 +12,26 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LH_ROOT="$SCRIPT_DIR/../.."
 
+unameOut="$(uname -s)"
+case "${unameOut}" in
+  Linux*)     machine=Linux;;
+  Darwin*)    machine=Mac;;
+  MINGW*)     machine=MinGw;;
+  *)          machine="UNKNOWN:${unameOut}"
+esac
+
 cd "$LH_ROOT"
 bash .github/scripts/print-devtools-relevant-commits.sh
-md5 \
+
+if [ "$machine" == "Linux" ]; then
+  hash_command=md5sum
+elif [ "$machine" == "Mac" ]; then
+  hash_command=md5
+else
+  echo "unsupported platform"
+  exit 1
+fi
+
+$hash_command \
   lighthouse-core/test/devtools-tests/* \
   third-party/devtools-tests/e2e/**/*.*
