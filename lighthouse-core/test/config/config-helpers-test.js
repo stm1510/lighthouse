@@ -5,8 +5,9 @@
  */
 
 import path from 'path';
+import {createRequire} from 'module';
 
-import {jest} from '@jest/globals';
+import jestMock from 'jest-mock';
 
 import {
   deepClone,
@@ -24,12 +25,13 @@ import Gatherer from '../../gather/gatherers/gatherer.js';
 import ImageElementsGatherer from '../../gather/gatherers/image-elements.js';
 import UserTimingsAudit from '../../audits/user-timings.js';
 import {LH_ROOT} from '../../../root.js';
-import {createCommonjsRefs} from '../../scripts/esm-utils.js';
+import {getModuleDirectory} from '../../../esm-utils.mjs';
 
-const {require, __dirname} = createCommonjsRefs(import.meta);
+const require = createRequire(import.meta.url);
+const moduleDir = getModuleDirectory(import.meta);
 
 const originalCwd = process.cwd;
-afterAll(() => {
+after(() => {
   process.cwd = originalCwd;
 });
 
@@ -195,13 +197,13 @@ describe('.mergePlugins', () => {
   // Include a configPath flag so that config.js looks for the plugins in the fixtures dir.
   const configDir = `${LH_ROOT}/lighthouse-core/test/fixtures/config-plugins/`;
 
-  it('merge plugins from the config', () => {
+  it('merge plugins from the config', async () => {
     const configJson = {
       audits: ['installable-manifest', 'metrics'],
       plugins: ['lighthouse-plugin-simple'],
     };
 
-    const config = mergePlugins(configJson, configDir, {});
+    const config = await mergePlugins(configJson, configDir, {});
     expect(config).toMatchObject({
       audits: [
         'installable-manifest',
@@ -218,13 +220,13 @@ describe('.mergePlugins', () => {
     });
   });
 
-  it('merge plugins from flags', () => {
+  it('merge plugins from flags', async () => {
     const configJson = {
       audits: ['installable-manifest', 'metrics'],
       plugins: ['lighthouse-plugin-simple'],
     };
     const flags = {plugins: ['lighthouse-plugin-no-groups']};
-    const config = mergePlugins(configJson, configDir, flags);
+    const config = await mergePlugins(configJson, configDir, flags);
 
     expect(config.categories).toHaveProperty('lighthouse-plugin-simple');
     expect(config.categories).toHaveProperty('lighthouse-plugin-no-groups');
@@ -233,19 +235,19 @@ describe('.mergePlugins', () => {
   it('validate plugin name', () => {
     const configJson = {audits: ['installable-manifest', 'metrics']};
     const flags = {plugins: ['not-a-plugin']};
-    expect(() => mergePlugins(configJson, configDir, flags)).toThrow(/does not start/);
+    expect(mergePlugins(configJson, configDir, flags)).rejects.toThrow(/does not start/);
   });
 
   it('validate plugin existence', () => {
     const configJson = {audits: ['installable-manifest', 'metrics']};
     const flags = {plugins: ['lighthouse-plugin-missing']};
-    expect(() => mergePlugins(configJson, configDir, flags)).toThrow(/Unable to locate plugin/);
+    expect(mergePlugins(configJson, configDir, flags)).rejects.toThrow(/Unable to locate plugin/);
   });
 
   it('validate plugin structure', () => {
     const configJson = {audits: ['installable-manifest', 'metrics']};
     const flags = {plugins: ['lighthouse-plugin-no-category']};
-    expect(() => mergePlugins(configJson, configDir, flags)).toThrow(/no valid category/);
+    expect(mergePlugins(configJson, configDir, flags)).rejects.toThrow(/no valid category/);
   });
 });
 
@@ -338,8 +340,8 @@ describe('.resolveSettings', () => {
 describe('.resolveGathererToDefn', () => {
   const coreList = Runner.getGathererList();
 
-  it('should expand gatherer path short-hand', () => {
-    const result = resolveGathererToDefn('image-elements', coreList);
+  it('should expand gatherer path short-hand', async () => {
+    const result = await resolveGathererToDefn('image-elements', coreList);
     expect(result).toEqual({
       path: 'image-elements',
       implementation: ImageElementsGatherer,
@@ -347,9 +349,9 @@ describe('.resolveGathererToDefn', () => {
     });
   });
 
-  it('should find relative to configDir', () => {
-    const configDir = path.resolve(__dirname, '../../gather/');
-    const result = resolveGathererToDefn('gatherers/image-elements', [], configDir);
+  it('should find relative to configDir', async () => {
+    const configDir = path.resolve(moduleDir, '../../gather/');
+    const result = await resolveGathererToDefn('gatherers/image-elements', [], configDir);
     expect(result).toEqual({
       path: 'gatherers/image-elements',
       implementation: ImageElementsGatherer,
@@ -357,8 +359,8 @@ describe('.resolveGathererToDefn', () => {
     });
   });
 
-  it('should expand gatherer impl short-hand', () => {
-    const result = resolveGathererToDefn({implementation: ImageElementsGatherer}, coreList);
+  it('should expand gatherer impl short-hand', async () => {
+    const result = await resolveGathererToDefn({implementation: ImageElementsGatherer}, coreList);
     expect(result).toEqual({
       implementation: ImageElementsGatherer,
       instance: expect.any(ImageElementsGatherer),
@@ -366,39 +368,39 @@ describe('.resolveGathererToDefn', () => {
   });
 
   it('throws for invalid gathererDefn', () => {
-    expect(() => resolveGathererToDefn({})).toThrow(/Invalid Gatherer type/);
+    expect(resolveGathererToDefn({})).rejects.toThrow(/Invalid Gatherer type/);
   });
 });
 
 describe('.resolveAuditsToDefns', () => {
-  it('should expand audit short-hand', () => {
-    const result = resolveAuditsToDefns(['user-timings']);
+  it('should expand audit short-hand', async () => {
+    const result = await resolveAuditsToDefns(['user-timings']);
 
     expect(result).toEqual([{path: 'user-timings', options: {}, implementation: UserTimingsAudit}]);
   });
 
-  it('should find relative to configDir', () => {
-    const configDir = path.resolve(__dirname, '../../');
-    const result = resolveAuditsToDefns(['audits/user-timings'], configDir);
+  it('should find relative to configDir', async () => {
+    const configDir = path.resolve(moduleDir, '../../');
+    const result = await resolveAuditsToDefns(['audits/user-timings'], configDir);
 
     expect(result).toEqual([
       {path: 'audits/user-timings', options: {}, implementation: UserTimingsAudit},
     ]);
   });
 
-  it('should handle multiple audit definition styles', () => {
-    const result = resolveAuditsToDefns(['user-timings', {implementation: UserTimingsAudit}]);
+  it('should handle multiple audit definition styles', async () => {
+    const result = await resolveAuditsToDefns(['user-timings', {implementation: UserTimingsAudit}]);
 
     expect(result).toMatchObject([{path: 'user-timings'}, {implementation: UserTimingsAudit}]);
   });
 
-  it('should merge audit options', () => {
+  it('should merge audit options', async () => {
     const audits = [
       'user-timings',
       {path: 'is-on-https', options: {x: 1, y: 1}},
       {path: 'is-on-https', options: {x: 2}},
     ];
-    const merged = resolveAuditsToDefns(audits);
+    const merged = await resolveAuditsToDefns(audits);
     expect(merged).toMatchObject([
       {path: 'user-timings', options: {}},
       {path: 'is-on-https', options: {x: 2, y: 1}},
@@ -406,15 +408,15 @@ describe('.resolveAuditsToDefns', () => {
   });
 
   it('throws for invalid auditDefns', () => {
-    expect(() => resolveAuditsToDefns([new Gatherer()])).toThrow(/Invalid Audit type/);
+    expect(resolveAuditsToDefns([new Gatherer()])).rejects.toThrow(/Invalid Audit type/);
   });
 });
 
 describe('.resolveModulePath', () => {
-  const configFixturePath = path.resolve(__dirname, '../fixtures/config');
+  const configFixturePath = path.resolve(moduleDir, '../fixtures/config');
 
   beforeEach(() => {
-    process.cwd = jest.fn(() => configFixturePath);
+    process.cwd = jestMock.fn(() => configFixturePath);
   });
 
   it('lighthouse and plugins are installed in the same path', () => {
@@ -431,7 +433,7 @@ describe('.resolveModulePath', () => {
     });
 
     it('relative to the config path', () => {
-      process.cwd = jest.fn(() => path.resolve(configFixturePath, '../'));
+      process.cwd = jestMock.fn(() => path.resolve(configFixturePath, '../'));
       const pluginName = 'lighthouse-plugin-config-helper';
       const pathToPlugin = resolveModulePath(pluginName, configFixturePath, 'plugin');
       expect(pathToPlugin).toEqual(require.resolve(path.resolve(configFixturePath, pluginName)));
@@ -439,7 +441,7 @@ describe('.resolveModulePath', () => {
   });
 
   describe('lighthouse and plugins are installed by npm', () => {
-    const pluginsDirectory = path.resolve(__dirname, '../fixtures/config/');
+    const pluginsDirectory = path.resolve(moduleDir, '../fixtures/config/');
 
     // working directory/
     //   |-- node_modules/
@@ -447,7 +449,7 @@ describe('.resolveModulePath', () => {
     it('in current working directory', () => {
       const pluginName = 'plugin-in-working-directory';
       const pluginDir = `${pluginsDirectory}/node_modules/plugin-in-working-directory`;
-      process.cwd = jest.fn(() => pluginsDirectory);
+      process.cwd = jestMock.fn(() => pluginsDirectory);
 
       const pathToPlugin = resolveModulePath(pluginName, null, 'plugin');
 
@@ -462,7 +464,7 @@ describe('.resolveModulePath', () => {
     it('relative to the config path', () => {
       const pluginName = 'plugin-in-config-directory';
       const configDirectory = `${pluginsDirectory}/config`;
-      process.cwd = jest.fn(() => '/usr/bin/node');
+      process.cwd = jestMock.fn(() => '/usr/bin/node');
 
       const pathToPlugin = resolveModulePath(pluginName, configDirectory, 'plugin');
 

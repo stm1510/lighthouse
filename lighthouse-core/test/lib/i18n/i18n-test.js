@@ -6,18 +6,18 @@
 
 import path from 'path';
 
-import {jest} from '@jest/globals';
 import log from 'lighthouse-logger';
+import jestMock from 'jest-mock';
 
 import i18n from '../../../lib/i18n/i18n.js';
-import {createCommonjsRefs} from '../../../scripts/esm-utils.js';
+import {getModuleDirectory} from '../../../../esm-utils.mjs';
 
-const {__dirname} = createCommonjsRefs(import.meta);
+const moduleDir = getModuleDirectory(import.meta);
 
 describe('i18n', () => {
   describe('#createMessageInstanceIdFn', () => {
     it('returns an IcuMessage reference', () => {
-      const fakeFile = path.join(__dirname, 'fake-file.js');
+      const fakeFile = path.join(moduleDir, 'fake-file.js');
       const templates = {daString: 'use {x} me!'};
       const formatter = i18n.createMessageInstanceIdFn(fakeFile, templates);
 
@@ -47,7 +47,7 @@ describe('i18n', () => {
     });
 
     it('logs a warning if locale is not available and the default is used', () => {
-      const logListener = jest.fn();
+      const logListener = jestMock.fn();
       log.events.on('warning', logListener);
 
       expect(i18n.lookupLocale(invalidLocale)).toEqual('en-US');

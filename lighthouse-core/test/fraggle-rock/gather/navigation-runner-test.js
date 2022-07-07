@@ -4,7 +4,8 @@
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 
-import {jest} from '@jest/globals';
+import * as td from 'testdouble';
+import jestMock from 'jest-mock';
 
 import {
   createMockDriver,
@@ -27,19 +28,18 @@ import {fnAny} from '../../test-utils.js';
 /** @type {import('../../../fraggle-rock/gather/navigation-runner.js')} */
 let runner;
 
-beforeAll(async () => {
+before(async () => {
   runner = (await import('../../../fraggle-rock/gather/navigation-runner.js'));
 });
 
 const mocks = mockDriverSubmodules();
 
-/** @type {ReturnType<typeof mockRunnerModule>} */
-let mockRunner;
+const mockRunner = mockRunnerModule();
 
 // Establish the mocks before we import the file under test.
-jest.mock('../../../runner.js', () => mockRunner = mockRunnerModule());
+td.replace('../../../runner.js', mockRunner);
 
-/** @typedef {{meta: LH.Gatherer.GathererMeta<'Accessibility'>, getArtifact: jest.Mock<any, any>, startInstrumentation:jest.Mock<any, any>, stopInstrumentation: jest.Mock<any, any>, startSensitiveInstrumentation:jest.Mock<any, any>, stopSensitiveInstrumentation: jest.Mock<any, any>}} MockGatherer */
+/** @typedef {{meta: LH.Gatherer.GathererMeta<'Accessibility'>, getArtifact: Mock<any, any>, startInstrumentation: Mock<any, any>, stopInstrumentation: Mock<any, any>, startSensitiveInstrumentation: Mock<any, any>, stopSensitiveInstrumentation:  Mock<any, any>}} MockGatherer */
 
 describe('NavigationRunner', () => {
   let requestedUrl = '';
@@ -104,11 +104,11 @@ describe('NavigationRunner', () => {
     };
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     requestedUrl = 'http://example.com';
     requestor = requestedUrl;
     mockRunner.reset();
-    config = initializeConfig(undefined, {gatherMode: 'navigation'}).config;
+    config = (await initializeConfig(undefined, {gatherMode: 'navigation'})).config;
     navigation = createNavigation().navigation;
     computedCache = new Map();
     baseArtifacts = createMockBaseArtifacts();
@@ -187,7 +187,7 @@ describe('NavigationRunner', () => {
     });
 
     it('should navigate as many times as there are navigations', async () => {
-      config = initializeConfig(
+      config = (await initializeConfig(
         {
           ...config,
           navigations: [
@@ -198,7 +198,7 @@ describe('NavigationRunner', () => {
           ],
         },
         {gatherMode: 'navigation'}
-      ).config;
+      )).config;
 
       await run();
       const navigations = mocks.navigationMock.gotoURL.mock.calls;
@@ -209,7 +209,7 @@ describe('NavigationRunner', () => {
     it('should backfill requested URL using a callback requestor', async () => {
       requestedUrl = 'https://backfill.example.com';
       requestor = () => {};
-      config = initializeConfig(
+      config = (await initializeConfig(
         {
           ...config,
           navigations: [
@@ -217,7 +217,7 @@ describe('NavigationRunner', () => {
           ],
         },
         {gatherMode: 'navigation'}
-      ).config;
+      )).config;
       mocks.navigationMock.gotoURL.mockReturnValue({
         requestedUrl,
         mainDocumentUrl: requestedUrl,
@@ -235,7 +235,7 @@ describe('NavigationRunner', () => {
     });
 
     it('should merge artifacts between navigations', async () => {
-      config = initializeConfig(
+      config = (await initializeConfig(
         {
           ...config,
           navigations: [
@@ -244,7 +244,7 @@ describe('NavigationRunner', () => {
           ],
         },
         {gatherMode: 'navigation'}
-      ).config;
+      )).config;
 
       // Both gatherers will error in these test conditions, but artifact errors
       // will be merged into single `artifacts` object.
@@ -255,7 +255,7 @@ describe('NavigationRunner', () => {
     });
 
     it('should retain PageLoadError and associated warnings', async () => {
-      config = initializeConfig(
+      config = (await initializeConfig(
         {
           ...config,
           navigations: [
@@ -264,7 +264,7 @@ describe('NavigationRunner', () => {
           ],
         },
         {gatherMode: 'navigation'}
-      ).config;
+      )).config;
 
       // Ensure the first real page load fails.
       mocks.navigationMock.gotoURL.mockImplementation((driver, url) => {
@@ -365,7 +365,7 @@ describe('NavigationRunner', () => {
     it('passes through an error in dependencies', async () => {
       const {navigation} = createNavigation();
       const err = new Error('Error in dependency chain');
-      navigation.artifacts[0].gatherer.instance.startInstrumentation = jest
+      navigation.artifacts[0].gatherer.instance.startInstrumentation = jestMock
         .fn()
         .mockRejectedValue(err);
       navigation.artifacts[1].dependencies = {Accessibility: {id: 'Timespan'}};
@@ -560,8 +560,7 @@ describe('NavigationRunner', () => {
 
   describe('navigation', () => {
     it('should throw on invalid URL', async () => {
-      const runnerActual = /** @type {typeof import('../../../runner.js')} */ (
-        jest.requireActual('../../../runner.js'));
+      const {default: runnerActual} = await import('../../../runner.js');
       mockRunner.gather.mockImplementation(runnerActual.gather);
 
       const navigatePromise = runner.navigationGather(
