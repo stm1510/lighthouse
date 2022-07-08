@@ -89,57 +89,79 @@ function addSniffer(receiver, methodName, override) {
   };
 }
 
-const sniffLhr = `
-new Promise(resolve => {
-  const panel = UI.panels.lighthouse || UI.panels.audits;
-  const methodName = panel.__proto__.buildReportUI ?
-    'buildReportUI' : '_buildReportUI';
-  (${addSniffer.toString()})(
-    panel.__proto__,
-    methodName,
-    (lhr, artifacts) => resolve({lhr, artifacts})
-  );
-});
-`;
+/**
+ * @template R [unknown]
+ * @param {LH.Puppeteer.CDPSession} session
+ * @param {() => (R|Promise<R>)} fn
+ * @param {Function[]} [deps]
+ * @return {Promise<R>}
+ */
+async function evaluateInSession(session, fn, deps) {
+  const depsSerialized = deps ? deps.join('\n') : '';
 
-const sniffLighthouseStarted = `
-new Promise(resolve => {
-  const panel = UI.panels.lighthouse || UI.panels.audits;
-  const protocolService = panel.protocolService || panel._protocolService;
-  const functionName = protocolService.__proto__.startLighthouse ?
-    'startLighthouse' :
-    'collectLighthouseResults';
-  (${addSniffer.toString()})(
-    protocolService.__proto__,
-    functionName,
-    (inspectedURL) => resolve(inspectedURL)
-  );
-});
-`;
+  const expression = `(() => {
+    ${depsSerialized}
+    return (${fn.toString()})();
+  })()`;
+  const {result, exceptionDetails} = await session.send('Runtime.evaluate', {
+    awaitPromise: true,
+    returnByValue: true,
+    expression,
+  });
 
-const startLighthouse = `
-(async () => {
+  if (exceptionDetails) {
+    throw new Error(exceptionDetails.text);
+  }
+
+  return result.value;
+}
+
+/**
+ * @template R [unknown]
+ * @param {LH.Puppeteer.CDPSession} session
+ * @param {() => (R|Promise<R>)} fn
+ * @param {Function[]} [deps]
+ * @return {Promise<R>}
+ */
+async function waitForFunction(session, fn, deps) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      return await evaluateInSession(session, fn, deps);
+    } catch {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+}
+
+/* eslint-disable */
+async function waitForLighthouseReady() {
+  // @ts-expect-error global
   const viewManager = UI.viewManager || (UI.ViewManager.ViewManager || UI.ViewManager).instance();
   const views = viewManager.views || viewManager._views;
   const panelName = views.has('lighthouse') ? 'lighthouse' : 'audits';
   await viewManager.showView(panelName);
 
+  // @ts-expect-error global
   const panel = UI.panels.lighthouse || UI.panels.audits;
   const button = panel.contentElement.querySelector('button');
   if (button.disabled) throw new Error('Start button disabled');
 
+  // @ts-expect-error global
   UI.dockController.setDockSide('undocked');
 
   // Give the main target model a moment to be available.
   // Otherwise, 'SDK.TargetManager.TargetManager.instance().mainTarget()' is null.
+  // @ts-expect-error global
   if (self.runtime && self.runtime.loadLegacyModule) {
     // This exposes TargetManager via self.SDK.
     try {
+    // @ts-expect-error global
       await self.runtime.loadLegacyModule('core/sdk/sdk-legacy.js');
     } catch {}
   }
-  const targetManager =
-    SDK.targetManager || (SDK.TargetManager.TargetManager || SDK.TargetManager).instance();
+  // @ts-expect-error global
+  const targetManager = SDK.targetManager || (SDK.TargetManager.TargetManager || SDK.TargetManager).instance();
   if (targetManager.mainTarget() === null) {
     if (targetManager?.observeTargets) {
       await new Promise(resolve => targetManager.observeTargets({
@@ -152,22 +174,46 @@ const startLighthouse = `
       }
     }
   }
-
-  button.click();
-})()
-`;
-
-/**
- * @param {string} url
- */
-function isValidUrl(url) {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
 }
+
+async function runLighthouse() {
+  const startedPromise = new Promise(resolve => {
+    // @ts-expect-error global
+    const panel = UI.panels.lighthouse || UI.panels.audits;
+    const protocolService = panel.protocolService || panel._protocolService;
+    const functionName = protocolService.__proto__.startLighthouse ?
+      'startLighthouse' :
+      'collectLighthouseResults';
+    addSniffer(
+      protocolService.__proto__,
+      functionName,
+      resolve,
+    );
+  });
+
+  /** @type {Promise<{lhr: LH.Result, artifacts: LH.Artifacts}>} */
+  const resultPromise = new Promise(resolve => {
+    // @ts-expect-error global
+    const panel = UI.panels.lighthouse || UI.panels.audits;
+    const methodName = panel.__proto__.buildReportUI ?
+      'buildReportUI' : '_buildReportUI';
+    addSniffer(
+      panel.__proto__,
+      methodName,
+      // @ts-expect-error implicit any
+      (lhr, artifacts) => resolve({lhr, artifacts})
+    );
+  });
+
+  // @ts-expect-error global
+  const panel = UI.panels.lighthouse || UI.panels.audits;
+  const button = panel.contentElement.querySelector('button');
+  button.click();
+
+  await startedPromise;
+  return resultPromise;
+}
+/* eslint-enable */
 
 /**
  * @param {LH.Puppeteer.Page} page
@@ -178,32 +224,38 @@ function isValidUrl(url) {
  */
 async function testPage(page, browser, url, config) {
   const targets = await browser.targets();
-  const inspectorTarget = targets.filter(t => t.url().includes('devtools'))[1];
+  const inspectorTarget = targets.find(t => t.url().includes('devtools'));
   if (!inspectorTarget) throw new Error('No inspector found.');
 
-  const session = await inspectorTarget.createCDPSession();
-  await session.send('Runtime.enable');
+  const inspectorSession = await inspectorTarget.createCDPSession();
+  await inspectorSession.send('Runtime.enable');
 
-  // Navigate to page and wait for initial HTML to be parsed before trying to start LH.
-  await new Promise((resolve, reject) => {
-    page.target().createCDPSession()
-      .then(session => {
-        session.send('Page.enable').then(() => {
-          session.once('Page.domContentEventFired', resolve);
-          page.goto(url);
-        });
-      })
-      .catch(reject);
-  });
+  await page.goto(url, {waitUntil: ['domcontentloaded']});
 
   if (config) {
+    // Screen emulation is handled by DevTools, so we should avoid adding our own.
+    if (config.settings?.screenEmulation) {
+      throw new Error('Configs that modify device emulation are unsupported in DevTools');
+    }
+    if (!config.settings) config.settings = {};
+    config.settings.screenEmulation = {disabled: true};
+
     // Must attach to the Lighthouse worker target and override the `self.createConfig`
     // function, allowing us to use any config we want.
-    session.send('Target.setAutoAttach', {
-      autoAttach: true, flatten: true, waitForDebuggerOnStart: false,
+    await inspectorSession.send('Target.setAutoAttach', {
+      autoAttach: true, flatten: true, waitForDebuggerOnStart: true,
     });
-    session.once('Target.attachedToTarget', async (event) => {
-      if (event.targetInfo.type !== 'worker') throw new Error('expected lighthouse worker');
+    inspectorSession.once('Target.attachedToTarget', async (event) => {
+      if (!event.targetInfo.url.includes('lighthouse_worker')) {
+        throw new Error('expected lighthouse worker');
+      }
+
+      // Ensure the inspector is paused once the worker is initialized so Lighthouse doesn't start prematurely.
+      await Promise.all([
+        inspectorSession.send('Runtime.enable'),
+        inspectorSession.send('Debugger.enable'),
+      ]);
+      await inspectorSession.send('Debugger.pause');
 
       const targets = await browser.targets();
       const workerTarget = targets.find(t => t._targetId === event.targetInfo.targetId);
@@ -213,61 +265,21 @@ async function testPage(page, browser, url, config) {
       await Promise.all([
         workerSession.send('Runtime.enable'),
         workerSession.send('Debugger.enable'),
+        workerSession.send('Runtime.runIfWaitingForDebugger'),
         new Promise(resolve => {
           workerSession.once('Debugger.scriptParsed', resolve);
         }),
       ]);
-      await workerSession.send('Debugger.pause');
       await workerSession.send('Runtime.evaluate', {
         expression: `self.createConfig = () => (${JSON.stringify(config)});`,
       });
-      await workerSession.send('Debugger.resume');
+      await inspectorSession.send('Debugger.resume');
+      await inspectorSession.send('Debugger.disable');
     });
   }
 
-  /** @type {Omit<LH.Puppeteer.Protocol.Runtime.EvaluateResponse, 'result'>|undefined} */
-  let startLHResponse;
-  while (!startLHResponse || startLHResponse.exceptionDetails) {
-    if (startLHResponse) await new Promise(resolve => setTimeout(resolve, 1000));
-    startLHResponse = await session.send('Runtime.evaluate', {
-      expression: startLighthouse,
-      awaitPromise: true,
-    }).catch(err => ({exceptionDetails: err}));
-  }
-
-  /** @type {LH.Puppeteer.Protocol.Runtime.EvaluateResponse} */
-  const lhStartedResponse = await session.send('Runtime.evaluate', {
-    expression: sniffLighthouseStarted,
-    awaitPromise: true,
-    returnByValue: true,
-  }).catch(err => err);
-  // Verify the first parameter to `startLighthouse`, which should be a url.
-  // In M100 the LHR is returned on `collectLighthouseResults` which has just 1 options parameter containing `inspectedUrl`.
-  // Don't try to check the exact value (because of redirects and such), just
-  // make sure it exists.
-  if (
-    !isValidUrl(lhStartedResponse.result.value) &&
-    !isValidUrl(lhStartedResponse.result.value.inspectedURL)
-  ) {
-    throw new Error(`Lighthouse did not start correctly. Got unexpected value for url: ${
-      JSON.stringify(lhStartedResponse.result.value)}`);
-  }
-
-  /** @type {LH.Puppeteer.Protocol.Runtime.EvaluateResponse} */
-  const remoteLhrResponse = await session.send('Runtime.evaluate', {
-    expression: sniffLhr,
-    awaitPromise: true,
-    returnByValue: true,
-  }).catch(err => err);
-
-  if (!remoteLhrResponse.result?.value?.lhr) {
-    throw new Error('Problem sniffing LHR.');
-  }
-  if (!remoteLhrResponse.result?.value?.artifacts) {
-    throw new Error('Problem sniffing artifacts.');
-  }
-
-  return remoteLhrResponse.result.value;
+  await waitForFunction(inspectorSession, waitForLighthouseReady);
+  return evaluateInSession(inspectorSession, runLighthouse, [addSniffer]);
 }
 
 /**
@@ -329,7 +341,7 @@ async function run() {
   let errorCount = 0;
   const urlList = await readUrlList();
   for (let i = 0; i < urlList.length; ++i) {
-    const page = await browser.newPage();
+    const page = (await browser.pages())[0];
     try {
       /** @type {NodeJS.Timeout} */
       let timeout;
