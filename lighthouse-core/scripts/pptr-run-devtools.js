@@ -236,7 +236,6 @@ async function testUrlFromDevtools(url, config, chromeFlags) {
 
   const inspectorTarget = await browser.waitForTarget(t => t.url().includes('devtools'));
   const inspectorSession = await inspectorTarget.createCDPSession();
-  await inspectorSession.send('Runtime.enable');
 
   await page.goto(url, {waitUntil: ['domcontentloaded']});
 
@@ -282,7 +281,6 @@ async function testUrlFromDevtools(url, config, chromeFlags) {
         expression: `self.createConfig = () => (${JSON.stringify(config)});`,
       });
       await inspectorSession.send('Debugger.resume');
-      await inspectorSession.send('Debugger.disable');
     });
   }
 
