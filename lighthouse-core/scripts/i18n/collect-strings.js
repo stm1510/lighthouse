@@ -38,7 +38,7 @@ const foldersWithStrings = [
   `${LH_ROOT}/report/renderer`,
   `${LH_ROOT}/treemap`,
   `${LH_ROOT}/flow-report`,
-  path.join(path.dirname(resolveModulePath('lighthouse-stack-packs')), 'packs'),
+  path.dirname(resolveModulePath('lighthouse-stack-packs')) + '/packs',
 ];
 
 const ignoredPathComponents = [
