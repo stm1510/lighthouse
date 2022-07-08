@@ -9,6 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import {pathToFileURL} from 'url';
 
 import glob from 'glob';
 import {expect} from 'expect';
@@ -37,7 +38,7 @@ const foldersWithStrings = [
   `${LH_ROOT}/report/renderer`,
   `${LH_ROOT}/treemap`,
   `${LH_ROOT}/flow-report`,
-  path.dirname(resolveModulePath('lighthouse-stack-packs')) + '/packs',
+  path.join(path.dirname(resolveModulePath('lighthouse-stack-packs')), 'packs'),
 ];
 
 const ignoredPathComponents = [
@@ -552,7 +553,7 @@ async function collectAllStringsInDir(dir) {
     if (!process.env.CI) console.log('Collecting from', relativeToRootPath);
 
     const content = fs.readFileSync(absolutePath, 'utf8');
-    const exportVars = await import(absolutePath);
+    const exportVars = await import(pathToFileURL(absolutePath).href);
     const regexMatch = content.match(UISTRINGS_REGEX);
     const exportedUIStrings = exportVars.UIStrings || exportVars.default?.UIStrings;
 
