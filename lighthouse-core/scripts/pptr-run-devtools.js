@@ -57,39 +57,6 @@ const argv = /** @type {Awaited<typeof argv_>} */ (argv_);
 const config = argv.config ? JSON.parse(argv.config) : undefined;
 
 /**
- * https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/test_runner/TestRunner.js;l=170;drc=f59e6de269f4f50bca824f8ca678d5906c7d3dc8
- * @param {Record<string, function>} receiver
- * @param {string} methodName
- * @param {function} override
- */
-function addSniffer(receiver, methodName, override) {
-  const original = receiver[methodName];
-  if (typeof original !== 'function') {
-    throw new Error('Cannot find method to override: ' + methodName);
-  }
-
-  /**
-   * @param  {...any} args
-   */
-  receiver[methodName] = function(...args) {
-    let result;
-    try {
-      result = original.apply(this, args);
-    } finally {
-      receiver[methodName] = original;
-    }
-    // In case of exception the override won't be called.
-    try {
-      Array.prototype.push.call(args, result);
-      override.apply(this, args);
-    } catch (e) {
-      throw new Error('Exception in overriden method \'' + methodName + '\': ' + e);
-    }
-    return result;
-  };
-}
-
-/**
  * @template R [unknown]
  * @param {LH.Puppeteer.CDPSession} session
  * @param {() => (R|Promise<R>)} fn
@@ -135,6 +102,39 @@ async function waitForFunction(session, fn, deps) {
 }
 
 /* eslint-disable */
+/**
+ * https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/test_runner/TestRunner.js;l=170;drc=f59e6de269f4f50bca824f8ca678d5906c7d3dc8
+ * @param {Record<string, function>} receiver
+ * @param {string} methodName
+ * @param {function} override
+ */
+function addSniffer(receiver, methodName, override) {
+  const original = receiver[methodName];
+  if (typeof original !== 'function') {
+    throw new Error('Cannot find method to override: ' + methodName);
+  }
+
+  /**
+   * @param  {...any} args
+   */
+  receiver[methodName] = function(...args) {
+    let result;
+    try {
+      result = original.apply(this, args);
+    } finally {
+      receiver[methodName] = original;
+    }
+    // In case of exception the override won't be called.
+    try {
+      Array.prototype.push.call(args, result);
+      override.apply(this, args);
+    } catch (e) {
+      throw new Error('Exception in overriden method \'' + methodName + '\': ' + e);
+    }
+    return result;
+  };
+}
+
 async function waitForLighthouseReady() {
   // @ts-expect-error global
   const viewManager = UI.viewManager || (UI.ViewManager.ViewManager || UI.ViewManager).instance();
@@ -216,17 +216,25 @@ async function runLighthouse() {
 /* eslint-enable */
 
 /**
- * @param {LH.Puppeteer.Page} page
- * @param {LH.Puppeteer.Browser} browser
  * @param {string} url
  * @param {LH.Config.Json=} config
+ * @param {string[]=} chromeFlags
  * @return {Promise<{lhr: LH.Result, artifacts: LH.Artifacts}>}
  */
-async function testPage(page, browser, url, config) {
-  const targets = await browser.targets();
-  const inspectorTarget = targets.find(t => t.url().includes('devtools'));
-  if (!inspectorTarget) throw new Error('No inspector found.');
+async function testUrlFromDevtools(url, config, chromeFlags) {
+  const browser = await puppeteer.launch({
+    executablePath: getChromePath(),
+    args: chromeFlags,
+    devtools: true,
+  });
 
+  if ((await browser.version()).startsWith('Headless')) {
+    throw new Error('You cannot use headless');
+  }
+
+  const page = (await browser.pages())[0];
+
+  const inspectorTarget = await browser.waitForTarget(t => t.url().includes('devtools'));
   const inspectorSession = await inspectorTarget.createCDPSession();
   await inspectorSession.send('Runtime.enable');
 
@@ -279,7 +287,11 @@ async function testPage(page, browser, url, config) {
   }
 
   await waitForFunction(inspectorSession, waitForLighthouseReady);
-  return evaluateInSession(inspectorSession, runLighthouse, [addSniffer]);
+  const result = await evaluateInSession(inspectorSession, runLighthouse, [addSniffer]);
+
+  await browser.close();
+
+  return result;
 }
 
 /**
@@ -328,20 +340,9 @@ async function run() {
     }
   }
 
-  const browser = await puppeteer.launch({
-    executablePath: getChromePath(),
-    args: chromeFlags,
-    devtools: true,
-  });
-
-  if ((await browser.version()).startsWith('Headless')) {
-    throw new Error('You cannot use headless');
-  }
-
   let errorCount = 0;
   const urlList = await readUrlList();
   for (let i = 0; i < urlList.length; ++i) {
-    const page = (await browser.pages())[0];
     try {
       /** @type {NodeJS.Timeout} */
       let timeout;
@@ -349,7 +350,7 @@ async function run() {
         timeout = setTimeout(reject, 100_000, new Error('Timed out waiting for Lighthouse to run'));
       });
       const {lhr, artifacts} = await Promise.race([
-        testPage(page, browser, urlList[i], config),
+        testUrlFromDevtools(urlList[i], config, chromeFlags),
         timeoutPromise,
       ]).finally(() => {
         clearTimeout(timeout);
@@ -361,17 +362,16 @@ async function run() {
       errorCount += 1;
       console.error(error.message);
       fs.writeFileSync(`${argv.o}/lhr-${i}.json`, JSON.stringify({error: error.message}, null, 2));
-    } finally {
-      try {
-        await page.close();
-      } catch {}
     }
   }
   console.log(`${urlList.length - errorCount} / ${urlList.length} urls run successfully.`);
   console.log(`Results saved to ${argv.o}`);
 
-  await browser.close();
-
   if (errorCount) process.exit(1);
 }
-run();
+
+if (process.argv.includes(import.meta.url.replace('file://', ''))) {
+  run();
+}
+
+export {testUrlFromDevtools};
