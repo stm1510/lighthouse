@@ -79,18 +79,18 @@ async function buildDevtools(logs) {
  */
 async function runLighthouse(url, configJson, testRunnerOptions = {}) {
   /** @type {string[]} */
-  const logs = [];
+  const logsFromDtBuild = [];
 
-  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools(logs);
+  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools(logsFromDtBuild);
   if (!await buildDevtoolsPromise) {
-    const log = logs.join('') + '\n';
+    const log = logsFromDtBuild.join('') + '\n';
     throw new Error(`failed to build devtools:\n${log}`);
   }
 
   const chromeFlags = [
     `--custom-devtools-frontend=file://${devtoolsDir}/out/Default/gen/front_end`,
   ];
-  const {lhr, artifacts} = await testUrlFromDevtools(url, configJson, chromeFlags);
+  const {lhr, artifacts, logs} = await testUrlFromDevtools(url, configJson, chromeFlags);
 
   if (testRunnerOptions.isDebug) {
     const outputDir = fs.mkdtempSync(os.tmpdir() + '/lh-smoke-cdt-runner-');

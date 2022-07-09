@@ -219,7 +219,7 @@ async function runLighthouse() {
  * @param {string} url
  * @param {LH.Config.Json=} config
  * @param {string[]=} chromeFlags
- * @return {Promise<{lhr: LH.Result, artifacts: LH.Artifacts}>}
+ * @return {Promise<{lhr: LH.Result, artifacts: LH.Artifacts, logs: string[]}>}
  */
 async function testUrlFromDevtools(url, config, chromeFlags) {
   const browser = await puppeteer.launch({
@@ -236,6 +236,13 @@ async function testUrlFromDevtools(url, config, chromeFlags) {
 
   const inspectorTarget = await browser.waitForTarget(t => t.url().includes('devtools'));
   const inspectorSession = await inspectorTarget.createCDPSession();
+
+  /** @type {string[]} */
+  const logs = [];
+  inspectorSession.on('Log.entryAdded', ({entry}) => {
+    logs.push(`LOG[${entry.level}]: ${entry.text}\n`);
+  });
+  await inspectorSession.send('Log.enable');
 
   await page.goto(url, {waitUntil: ['domcontentloaded']});
 
@@ -289,7 +296,7 @@ async function testUrlFromDevtools(url, config, chromeFlags) {
 
   await browser.close();
 
-  return result;
+  return {...result, logs};
 }
 
 /**
