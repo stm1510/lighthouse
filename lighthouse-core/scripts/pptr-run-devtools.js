@@ -58,8 +58,8 @@ const config = argv.config ? JSON.parse(argv.config) : undefined;
 
 /**
  * @template R [unknown]
- * @param {LH.Puppeteer.CDPSession} session
- * @param {() => (R|Promise<R>)} fn
+ * @param {puppeteer.CDPSession} session
+ * @param {string|(() => (R|Promise<R>))} fn
  * @param {Function[]} [deps]
  * @return {Promise<R>}
  */
@@ -77,7 +77,9 @@ async function evaluateInSession(session, fn, deps) {
   });
 
   if (exceptionDetails) {
-    throw new Error(exceptionDetails.text);
+    const text = exceptionDetails.exception?.description || exceptionDetails.text;
+    const name = typeof fn === 'string' ? '<stringified>' : fn.name;
+    throw new Error(`Evaluation exception: ${text}\n    at ${name} (Runtime.evaluate)`);
   }
 
   return result.value;
@@ -85,7 +87,7 @@ async function evaluateInSession(session, fn, deps) {
 
 /**
  * @template R [unknown]
- * @param {LH.Puppeteer.CDPSession} session
+ * @param {puppeteer.CDPSession} session
  * @param {() => (R|Promise<R>)} fn
  * @param {Function[]} [deps]
  * @return {Promise<R>}
@@ -177,24 +179,11 @@ async function waitForLighthouseReady() {
 }
 
 async function runLighthouse() {
-  const startedPromise = new Promise(resolve => {
-    // @ts-expect-error global
-    const panel = UI.panels.lighthouse || UI.panels.audits;
-    const protocolService = panel.protocolService || panel._protocolService;
-    const functionName = protocolService.__proto__.startLighthouse ?
-      'startLighthouse' :
-      'collectLighthouseResults';
-    addSniffer(
-      protocolService.__proto__,
-      functionName,
-      resolve,
-    );
-  });
+  // @ts-expect-error global
+  const panel = UI.panels.lighthouse || UI.panels.audits;
 
   /** @type {Promise<{lhr: LH.Result, artifacts: LH.Artifacts}>} */
-  const resultPromise = new Promise(resolve => {
-    // @ts-expect-error global
-    const panel = UI.panels.lighthouse || UI.panels.audits;
+  const resultPromise = new Promise((resolve, reject) => {
     const methodName = panel.__proto__.buildReportUI ?
       'buildReportUI' : '_buildReportUI';
     addSniffer(
@@ -203,17 +192,75 @@ async function runLighthouse() {
       // @ts-expect-error implicit any
       (lhr, artifacts) => resolve({lhr, artifacts})
     );
+
+    addSniffer(
+      panel.statusView.__proto__,
+      'renderBugReport',
+      // @ts-expect-error implicit any
+      (err) => reject(err)
+    );
   });
 
-  // @ts-expect-error global
-  const panel = UI.panels.lighthouse || UI.panels.audits;
   const button = panel.contentElement.querySelector('button');
   button.click();
 
-  await startedPromise;
   return resultPromise;
 }
 /* eslint-enable */
+
+/**
+ * @param {puppeteer.Browser} browser
+ * @param {puppeteer.CDPSession} inspectorSession
+ * @param {LH.Config.Json} config
+ */
+async function installCustomConfig(browser, inspectorSession, config) {
+  // Screen emulation is handled by DevTools, so we should avoid adding our own.
+  if (config.settings?.screenEmulation) {
+    throw new Error('Configs that modify device emulation are unsupported in DevTools');
+  }
+  if (!config.settings) config.settings = {};
+  config.settings.screenEmulation = {disabled: true};
+
+  const workerTarget = await browser.waitForTarget(t => t.url().includes('lighthouse_worker'));
+
+  // Ensure the inspector is paused once the worker is initialized so Lighthouse doesn't start prematurely.
+  await Promise.all([
+    inspectorSession.send('Runtime.enable'),
+    inspectorSession.send('Debugger.enable'),
+  ]);
+  await inspectorSession.send('Debugger.pause');
+
+  const workerSession = await workerTarget.createCDPSession();
+  await Promise.all([
+    workerSession.send('Runtime.enable'),
+    workerSession.send('Debugger.enable'),
+    workerSession.send('Runtime.runIfWaitingForDebugger'),
+    new Promise(resolve => {
+      workerSession.once('Debugger.scriptParsed', resolve);
+    }),
+  ]);
+  await evaluateInSession(workerSession,
+    `self.createConfig = () => (${JSON.stringify(config)})`
+  );
+
+  await inspectorSession.send('Debugger.resume');
+}
+
+/**
+ * @param {puppeteer.CDPSession} inspectorSession
+ * @param {string[]} logs
+ */
+async function installConsoleListener(inspectorSession, logs) {
+  inspectorSession.on('Log.entryAdded', ({entry}) => {
+    if (entry.level === 'verbose') return;
+    logs.push(`LOG[${entry.level}]: ${entry.text}\n`);
+  });
+  inspectorSession.on('Runtime.exceptionThrown', ({exceptionDetails}) => {
+    const text = exceptionDetails.exception?.description || exceptionDetails.text;
+    logs.push(`EXCEPTION: ${text}\n`);
+  });
+  await inspectorSession.send('Log.enable');
+}
 
 /**
  * @param {string} url
@@ -228,75 +275,47 @@ async function testUrlFromDevtools(url, config, chromeFlags) {
     devtools: true,
   });
 
-  if ((await browser.version()).startsWith('Headless')) {
-    throw new Error('You cannot use headless');
-  }
-
-  const page = (await browser.pages())[0];
-
-  const inspectorTarget = await browser.waitForTarget(t => t.url().includes('devtools'));
-  const inspectorSession = await inspectorTarget.createCDPSession();
-
-  /** @type {string[]} */
-  const logs = [];
-  inspectorSession.on('Log.entryAdded', ({entry}) => {
-    logs.push(`LOG[${entry.level}]: ${entry.text}\n`);
-  });
-  await inspectorSession.send('Log.enable');
-
-  await page.goto(url, {waitUntil: ['domcontentloaded']});
-
-  if (config) {
-    // Screen emulation is handled by DevTools, so we should avoid adding our own.
-    if (config.settings?.screenEmulation) {
-      throw new Error('Configs that modify device emulation are unsupported in DevTools');
+  try {
+    if ((await browser.version()).startsWith('Headless')) {
+      throw new Error('You cannot use headless');
     }
-    if (!config.settings) config.settings = {};
-    config.settings.screenEmulation = {disabled: true};
 
-    // Must attach to the Lighthouse worker target and override the `self.createConfig`
-    // function, allowing us to use any config we want.
-    await inspectorSession.send('Target.setAutoAttach', {
-      autoAttach: true, flatten: true, waitForDebuggerOnStart: true,
-    });
-    inspectorSession.once('Target.attachedToTarget', async (event) => {
-      if (!event.targetInfo.url.includes('lighthouse_worker')) {
-        throw new Error('expected lighthouse worker');
-      }
+    const page = (await browser.pages())[0];
 
-      // Ensure the inspector is paused once the worker is initialized so Lighthouse doesn't start prematurely.
-      await Promise.all([
-        inspectorSession.send('Runtime.enable'),
-        inspectorSession.send('Debugger.enable'),
-      ]);
-      await inspectorSession.send('Debugger.pause');
+    const inspectorTarget = await browser.waitForTarget(t => t.url().includes('devtools'));
+    const inspectorSession = await inspectorTarget.createCDPSession();
 
-      const targets = await browser.targets();
-      const workerTarget = targets.find(t => t._targetId === event.targetInfo.targetId);
-      if (!workerTarget) throw new Error('No lighthouse worker target found.');
+    /** @type {string[]} */
+    const logs = [];
+    await installConsoleListener(inspectorSession, logs);
 
-      const workerSession = await workerTarget.createCDPSession();
-      await Promise.all([
-        workerSession.send('Runtime.enable'),
-        workerSession.send('Debugger.enable'),
-        workerSession.send('Runtime.runIfWaitingForDebugger'),
-        new Promise(resolve => {
-          workerSession.once('Debugger.scriptParsed', resolve);
-        }),
-      ]);
-      await workerSession.send('Runtime.evaluate', {
-        expression: `self.createConfig = () => (${JSON.stringify(config)});`,
+    await page.goto(url, {waitUntil: ['domcontentloaded']});
+
+    await waitForFunction(inspectorSession, waitForLighthouseReady);
+
+    let configPromise = Promise.resolve();
+    if (config) {
+      // Must attach to the Lighthouse worker target and override the `self.createConfig`
+      // function, allowing us to use any config we want.
+      // This needs to be done *before* starting Lighthouse, otherwise the config may not be installed in time.
+      await inspectorSession.send('Target.setAutoAttach', {
+        autoAttach: true,
+        flatten: true,
+        waitForDebuggerOnStart: true,
       });
-      await inspectorSession.send('Debugger.resume');
-    });
+
+      configPromise = installCustomConfig(browser, inspectorSession, config);
+    }
+
+    const [result] = await Promise.all([
+      evaluateInSession(inspectorSession, runLighthouse, [addSniffer]),
+      configPromise,
+    ]);
+
+    return {...result, logs};
+  } finally {
+    await browser.close();
   }
-
-  await waitForFunction(inspectorSession, waitForLighthouseReady);
-  const result = await evaluateInSession(inspectorSession, runLighthouse, [addSniffer]);
-
-  await browser.close();
-
-  return {...result, logs};
 }
 
 /**

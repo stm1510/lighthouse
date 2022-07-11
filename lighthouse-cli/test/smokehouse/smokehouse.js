@@ -251,7 +251,7 @@ function logChildProcessError(localConsole, err) {
     localConsole.adoptStdStrings(err);
   }
 
-  localConsole.log(log.redify('Error: ') + err + '\n' + err.stack);
+  localConsole.log(log.redify(err.stack || err.message));
 }
 
 /**
