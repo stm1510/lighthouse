@@ -97,7 +97,11 @@ async function buildBundle(entryPath, distPath, opts = {minify: true}) {
   }).join(',\n');
 
   /** @type {Record<string, string>} */
-  const shimsObj = {};
+  const shimsObj = {
+    [require.resolve('../lighthouse-core/gather/connections/cri.js')]:
+      'export const CriConnection = {}',
+    [require.resolve('../package.json')]: `export const version = '${pkg.version}';`,
+  };
 
   const modulesToIgnore = [
     'puppeteer-core',
@@ -108,9 +112,6 @@ async function buildBundle(entryPath, distPath, opts = {minify: true}) {
     'source-map',
     'ws',
   ];
-
-  shimsObj[require.resolve('../lighthouse-core/gather/connections/cri.js')] =
-    'export const CriConnection = {}';
 
   // Don't include the stringified report in DevTools - see devtools-report-assets.js
   // Don't include in Lightrider - HTML generation isn't supported, so report assets aren't needed.
@@ -126,9 +127,6 @@ async function buildBundle(entryPath, distPath, opts = {minify: true}) {
   for (const modulePath of modulesToIgnore) {
     shimsObj[modulePath] = 'export default {}';
   }
-
-  shimsObj[require.resolve('../package.json')] =
-    `export const version = '${pkg.version}';`;
 
   const bundle = await rollup({
     input: entryPath,
