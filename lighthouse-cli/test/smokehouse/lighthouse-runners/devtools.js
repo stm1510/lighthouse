@@ -13,6 +13,7 @@ import os from 'os';
 import {spawn} from 'child_process';
 
 import {LH_ROOT} from '../../../../root.js';
+import {testUrlFromDevtools} from '../../../../lighthouse-core/scripts/pptr-run-devtools.js';
 
 const devtoolsDir =
   process.env.DEVTOOLS_PATH || `${LH_ROOT}/.tmp/chromium-web-tests/devtools/devtools-frontend`;
@@ -78,36 +79,24 @@ async function buildDevtools(logs) {
  */
 async function runLighthouse(url, configJson, testRunnerOptions = {}) {
   /** @type {string[]} */
-  const logs = [];
+  const logsFromDtBuild = [];
 
-  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools(logs);
+  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools(logsFromDtBuild);
   if (!await buildDevtoolsPromise) {
-    const log = logs.join('') + '\n';
+    const log = logsFromDtBuild.join('') + '\n';
     throw new Error(`failed to build devtools:\n${log}`);
   }
 
-  const outputDir = fs.mkdtempSync(os.tmpdir() + '/lh-smoke-cdt-runner-');
   const chromeFlags = [
     `--custom-devtools-frontend=file://${devtoolsDir}/out/Default/gen/front_end`,
   ];
-  const args = [
-    'run-devtools',
-    url,
-    `--chrome-flags=${chromeFlags.join(' ')}`,
-    '--output-dir', outputDir,
-  ];
-  if (configJson) {
-    args.push('--config', JSON.stringify(configJson));
-  }
-
-  await spawnAndLog(logs, 'yarn', args);
-  const lhr = JSON.parse(fs.readFileSync(`${outputDir}/lhr-0.json`, 'utf-8'));
-  const artifacts = JSON.parse(fs.readFileSync(`${outputDir}/artifacts-0.json`, 'utf-8'));
+  const {lhr, artifacts, logs} = await testUrlFromDevtools(url, configJson, chromeFlags);
 
   if (testRunnerOptions.isDebug) {
+    const outputDir = fs.mkdtempSync(os.tmpdir() + '/lh-smoke-cdt-runner-');
+    fs.writeFileSync(`${outputDir}/lhr.json`, JSON.stringify(lhr));
+    fs.writeFileSync(`${outputDir}/artifacts.json`, JSON.stringify(artifacts));
     console.log(`${url} results saved at ${outputDir}`);
-  } else {
-    fs.rmSync(outputDir, {recursive: true, force: true});
   }
 
   const log = logs.join('') + '\n';
