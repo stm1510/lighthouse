@@ -7,7 +7,7 @@
 
 import {Audit} from '../audit.js';
 
-import robotsParser from 'robots-parser'; // eslint-disable-line max-len
+import robotsParser from 'robots-parser';
 
 import URL from '../../lib/url-shim.js';
 import MainResource from '../../computed/main-resource.js';
