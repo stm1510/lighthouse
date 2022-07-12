@@ -10,61 +10,44 @@
 
 import fs from 'fs';
 import os from 'os';
-import {spawn} from 'child_process';
+import {execFile} from 'child_process';
 
 import {LH_ROOT} from '../../../../root.js';
 import {testUrlFromDevtools} from '../../../../lighthouse-core/scripts/pptr-run-devtools.js';
 
+/** @type {Promise<void>} */
+let buildDevtoolsPromise;
 const devtoolsDir =
   process.env.DEVTOOLS_PATH || `${LH_ROOT}/.tmp/chromium-web-tests/devtools/devtools-frontend`;
 
 /**
- * @param {string[]} logs
  * @param {string} command
  * @param {string[]} args
- * @return {Promise<boolean>} true if command exited successfully.
+ * @return {Promise<void>}
  */
-function spawnAndLog(logs, command, args) {
-  return new Promise((resolve) => {
-    const spawnHandle = spawn(command, args);
-    spawnHandle.on('close', code => {
-      if (code) {
-        logs.push(`[FAILURE] Command exited with code: ${code}\n`);
+function execAndLog(command, args) {
+  return new Promise((resolve, reject) => {
+    const handle = execFile(command, args, (error) => {
+      if (error) {
+        reject(error);
       } else {
-        logs.push('[SUCCESS] Command exited with code: 0\n');
+        resolve();
       }
-      resolve(code === 0);
     });
-    spawnHandle.on('error', (error) => {
-      logs.push(`ERROR: ${error.toString()}`);
-    });
-    spawnHandle.stdout.setEncoding('utf8');
-    spawnHandle.stdout.on('data', data => {
-      process.stdout.write(data);
-      logs.push(`STDOUT: ${data}`);
-    });
-    spawnHandle.stderr.setEncoding('utf8');
-    spawnHandle.stderr.on('data', data => {
-      process.stderr.write(data);
-      logs.push(`STDERR: ${data}`);
-    });
+    handle.stdout?.pipe(process.stdout);
+    handle.stderr?.pipe(process.stderr);
   });
 }
 
-/** @type {Promise<boolean>} */
-let buildDevtoolsPromise;
 /**
  * Download/pull latest DevTools, build Lighthouse for DevTools, roll to DevTools, and build DevTools.
- * @param {string[]} logs
  */
-async function buildDevtools(logs) {
-  if (process.env.CI) return true;
+async function buildDevtools() {
+  if (process.env.CI) return;
 
   process.env.DEVTOOLS_PATH = devtoolsDir;
-  const success =
-    await spawnAndLog(logs, 'bash', ['lighthouse-core/test/devtools-tests/download-devtools.sh']) &&
-    await spawnAndLog(logs, 'bash', ['lighthouse-core/test/devtools-tests/roll-devtools.sh']);
-  return success;
+  await execAndLog('bash', ['lighthouse-core/test/devtools-tests/download-devtools.sh']);
+  await execAndLog('bash', ['lighthouse-core/test/devtools-tests/roll-devtools.sh']);
 }
 
 /**
@@ -78,14 +61,8 @@ async function buildDevtools(logs) {
  * @return {Promise<{lhr: LH.Result, artifacts: LH.Artifacts, log: string}>}
  */
 async function runLighthouse(url, configJson, testRunnerOptions = {}) {
-  /** @type {string[]} */
-  const logsFromDtBuild = [];
-
-  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools(logsFromDtBuild);
-  if (!await buildDevtoolsPromise) {
-    const log = logsFromDtBuild.join('') + '\n';
-    throw new Error(`failed to build devtools:\n${log}`);
-  }
+  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools();
+  await buildDevtoolsPromise;
 
   const chromeFlags = [
     `--custom-devtools-frontend=file://${devtoolsDir}/out/Default/gen/front_end`,
