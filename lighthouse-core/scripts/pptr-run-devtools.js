@@ -189,15 +189,17 @@ async function runLighthouse() {
     addSniffer(
       panel.__proto__,
       methodName,
-      // @ts-expect-error implicit any
+      /**
+       * @param {LH.Result} lhr
+       * @param {LH.Artifacts} artifacts
+       */
       (lhr, artifacts) => resolve({lhr, artifacts})
     );
 
     addSniffer(
       panel.statusView.__proto__,
       'renderBugReport',
-      // @ts-expect-error implicit any
-      (err) => reject(err)
+      reject,
     );
   });
 
