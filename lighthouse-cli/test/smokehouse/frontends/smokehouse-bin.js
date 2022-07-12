@@ -184,7 +184,7 @@ async function begin() {
   if (argv.runner === 'bundle') {
     console.log('\n✨ Be sure to have recently run this: yarn build-all');
   }
-  const {runLighthouse} = await import(runnerPath);
+  const {runLighthouse, setup} = await import(runnerPath);
   runLighthouse.runnerName = argv.runner;
 
   // Find test definition file and filter by requestedTestIds.
@@ -219,6 +219,7 @@ async function begin() {
       useLegacyNavigation: argv.legacyNavigation,
       lighthouseRunner: runLighthouse,
       takeNetworkRequestUrls,
+      setup,
     };
 
     smokehouseResult = (await runSmokehouse(prunedTestDefns, options));

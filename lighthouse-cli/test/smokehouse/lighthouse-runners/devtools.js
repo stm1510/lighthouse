@@ -15,15 +15,13 @@ import {execFileSync} from 'child_process';
 import {LH_ROOT} from '../../../../root.js';
 import {testUrlFromDevtools} from '../../../../lighthouse-core/scripts/pptr-run-devtools.js';
 
-/** @type {Promise<void>} */
-let buildDevtoolsPromise;
 const devtoolsDir =
   process.env.DEVTOOLS_PATH || `${LH_ROOT}/.tmp/chromium-web-tests/devtools/devtools-frontend`;
 
 /**
  * Download/pull latest DevTools, build Lighthouse for DevTools, roll to DevTools, and build DevTools.
  */
-async function buildDevtools() {
+async function setup() {
   if (process.env.CI) return;
 
   process.env.DEVTOOLS_PATH = devtoolsDir;
@@ -48,9 +46,6 @@ async function buildDevtools() {
  * @return {Promise<{lhr: LH.Result, artifacts: LH.Artifacts, log: string}>}
  */
 async function runLighthouse(url, configJson, testRunnerOptions = {}) {
-  if (!buildDevtoolsPromise) buildDevtoolsPromise = buildDevtools();
-  await buildDevtoolsPromise;
-
   const chromeFlags = [
     `--custom-devtools-frontend=file://${devtoolsDir}/out/Default/gen/front_end`,
   ];
@@ -69,4 +64,5 @@ async function runLighthouse(url, configJson, testRunnerOptions = {}) {
 
 export {
   runLighthouse,
+  setup,
 };
