@@ -10,7 +10,7 @@
 
 import fs from 'fs';
 import os from 'os';
-import {execFile} from 'child_process';
+import {execFileSync} from 'child_process';
 
 import {LH_ROOT} from '../../../../root.js';
 import {testUrlFromDevtools} from '../../../../lighthouse-core/scripts/pptr-run-devtools.js';
@@ -21,33 +21,20 @@ const devtoolsDir =
   process.env.DEVTOOLS_PATH || `${LH_ROOT}/.tmp/chromium-web-tests/devtools/devtools-frontend`;
 
 /**
- * @param {string} command
- * @param {string[]} args
- * @return {Promise<void>}
- */
-function execAndLog(command, args) {
-  return new Promise((resolve, reject) => {
-    const handle = execFile(command, args, (error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-    handle.stdout?.pipe(process.stdout);
-    handle.stderr?.pipe(process.stderr);
-  });
-}
-
-/**
  * Download/pull latest DevTools, build Lighthouse for DevTools, roll to DevTools, and build DevTools.
  */
 async function buildDevtools() {
   if (process.env.CI) return;
 
   process.env.DEVTOOLS_PATH = devtoolsDir;
-  await execAndLog('bash', ['lighthouse-core/test/devtools-tests/download-devtools.sh']);
-  await execAndLog('bash', ['lighthouse-core/test/devtools-tests/roll-devtools.sh']);
+  execFileSync('bash',
+    ['lighthouse-core/test/devtools-tests/download-devtools.sh'],
+    {stdio: 'inherit'}
+  );
+  execFileSync('bash',
+    ['lighthouse-core/test/devtools-tests/roll-devtools.sh'],
+    {stdio: 'inherit'}
+  );
 }
 
 /**
