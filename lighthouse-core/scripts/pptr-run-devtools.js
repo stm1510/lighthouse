@@ -222,6 +222,9 @@ async function runLighthouse() {
  * @param {LH.Config.Json} config
  */
 async function installCustomLighthouseConfig(browser, inspectorSession, config) {
+  // Prevent modification for tests that are retried.
+  config = JSON.parse(JSON.stringify(config));
+
   // Screen emulation is handled by DevTools, so we should avoid adding our own.
   if (config.settings?.screenEmulation) {
     throw new Error(
