@@ -224,7 +224,10 @@ async function runLighthouse() {
 async function installCustomLighthouseConfig(browser, inspectorSession, config) {
   // Screen emulation is handled by DevTools, so we should avoid adding our own.
   if (config.settings?.screenEmulation) {
-    throw new Error('Configs that modify device emulation are unsupported in DevTools');
+    throw new Error(
+      'Configs that modify device emulation are unsupported in DevTools:\n' +
+      JSON.stringify(config, null, 2)
+    );
   }
   if (!config.settings) config.settings = {};
   config.settings.screenEmulation = {disabled: true};
