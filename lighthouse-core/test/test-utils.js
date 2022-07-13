@@ -182,35 +182,35 @@ async function flushAllTimersAndMicrotasks(ms = 1000) {
  * shouldn't concern themselves about.
  */
 function makeMocksForGatherRunner() {
-  td.replaceEsm(require.resolve('../gather/driver/environment.js'), {
+  td.replaceEsm('../gather/driver/environment.js', {
     getBenchmarkIndex: () => Promise.resolve(150),
     getBrowserVersion: async () => ({userAgent: 'Chrome', milestone: 80}),
     getEnvironmentWarnings: () => [],
   });
-  td.replaceEsm(require.resolve('../gather/gatherers/stacks.js'), undefined, {
+  td.replaceEsm('../gather/gatherers/stacks.js', undefined, {
     collectStacks: () => Promise.resolve([]),
   });
-  td.replaceEsm(require.resolve('../gather/gatherers/installability-errors.js'), undefined, {
+  td.replaceEsm('../gather/gatherers/installability-errors.js', undefined, {
     getInstallabilityErrors: async () => ({errors: []}),
   });
-  td.replaceEsm(require.resolve('../gather/gatherers/web-app-manifest.js'), undefined, {
+  td.replaceEsm('../gather/gatherers/web-app-manifest.js', undefined, {
     getWebAppManifest: async () => null,
   });
-  td.replaceEsm(require.resolve('../lib/emulation.js'), {
+  td.replaceEsm('../lib/emulation.js', {
     emulate: jestMock.fn(),
     throttle: jestMock.fn(),
     clearThrottling: jestMock.fn(),
   });
-  td.replaceEsm(require.resolve('../gather/driver/prepare.js'), {
+  td.replaceEsm('../gather/driver/prepare.js', {
     prepareTargetForNavigationMode: jestMock.fn(),
     prepareTargetForIndividualNavigation: jestMock.fn().mockResolvedValue({warnings: []}),
   });
-  td.replaceEsm(require.resolve('../gather/driver/storage.js'), {
+  td.replaceEsm('../gather/driver/storage.js', {
     clearDataForOrigin: jestMock.fn(),
     cleanBrowserCaches: jestMock.fn(),
     getImportantStorageWarning: jestMock.fn(),
   });
-  td.replaceEsm(require.resolve('../gather/driver/navigation.js'), {
+  td.replaceEsm('../gather/driver/navigation.js', {
     gotoURL: jestMock.fn().mockResolvedValue({
       mainDocumentUrl: 'http://example.com',
       warnings: [],
@@ -284,7 +284,7 @@ function getURLArtifactFromDevtoolsLog(devtoolsLog) {
 async function importMock(modulePath, importMeta) {
   const dir = path.dirname(url.fileURLToPath(importMeta.url));
   modulePath = path.resolve(dir, modulePath);
-  const mock = await import(modulePath);
+  const mock = await import(url.pathToFileURL(modulePath).href);
   if (!Object.keys(mock).some(key => mock[key]?.mock)) {
     throw new Error(`${modulePath} was not mocked!`);
   }

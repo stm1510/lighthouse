@@ -84,7 +84,7 @@ function loadArtifacts(basePath) {
 }
 
 /**
- * A replacer function for JSON.stingify of the artifacts. Used to serialize objects that
+ * A replacer function for JSON.stringify of the artifacts. Used to serialize objects that
  * JSON won't normally handle.
  * @param {string} key
  * @param {any} value
