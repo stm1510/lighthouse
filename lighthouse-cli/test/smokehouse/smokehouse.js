@@ -63,7 +63,13 @@ async function runSmokehouse(smokeTestDefns, smokehouseOptions) {
   assertPositiveInteger('jobs', jobs);
   assertNonNegativeInteger('retries', retries);
 
-  await setup?.();
+  try {
+    await setup?.();
+  } catch (err) {
+    console.error(log.redify('\nERROR DURING SETUP:'));
+    console.error(log.redify(err.stack || err));
+    return {success: false, testResults: []};
+  }
 
   // Run each testDefn in parallel based on the concurrencyLimit.
   const concurrentMapper = new ConcurrentMapper();

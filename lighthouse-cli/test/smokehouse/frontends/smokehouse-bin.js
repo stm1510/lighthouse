@@ -206,8 +206,8 @@ async function begin() {
     // If running the core tests, spin up the test server.
     if (testDefnPath === coreTestDefnsPath) {
       ({server, serverForOffline} = await import('../../fixtures/static-server.js'));
-      server.listen(10200, 'localhost');
-      serverForOffline.listen(10503, 'localhost');
+      await server.listen(10200, 'localhost');
+      await serverForOffline.listen(10503, 'localhost');
       takeNetworkRequestUrls = server.takeRequestUrls.bind(server);
     }
 
